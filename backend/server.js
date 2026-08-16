@@ -7,8 +7,11 @@ const authRoutes = require('./routes/authRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173'
+}));
 app.use(express.json());
+
 
 // Routes
 app.use('/api/auth', authRoutes);

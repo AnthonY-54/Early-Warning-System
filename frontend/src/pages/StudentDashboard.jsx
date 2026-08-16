@@ -11,8 +11,10 @@ const StudentDashboard = () => {
 
   useEffect(() => {
     // Fetch identity-driven student data for the logged-in user
-    axios.get('http://localhost:5000/api/dashboard/student/me')
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    axios.get(`${API_URL}/api/dashboard/student/me`)
       .then(res => {
+
         setData(res.data);
         setLoading(false);
       })

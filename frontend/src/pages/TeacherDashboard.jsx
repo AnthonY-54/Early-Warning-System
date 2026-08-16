@@ -19,8 +19,10 @@ const TeacherDashboard = () => {
 
   useEffect(() => {
     // Fetch Teacher Overview Data
-    axios.get('http://localhost:5000/api/dashboard/teacher/overview')
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    axios.get(`${API_URL}/api/dashboard/teacher/overview`)
       .then(res => {
+
         setData(res.data);
         setLoading(false);
       })
