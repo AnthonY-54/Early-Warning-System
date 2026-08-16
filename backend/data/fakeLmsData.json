@@ -1,0 +1,162 @@
+[
+  {
+    "student_id": "S101",
+    "name": "Priyanshu",
+    "course": "Conservation Geography",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 621,
+      "active_days": 24,
+      "resources_viewed": 12
+    },
+    "weakTopic": "Allelopathy",
+    "performance_timeline": [
+      { "stage": "20%", "score": 76, "risk": "Green" },
+      { "stage": "40%", "score": 82, "risk": "Green" }
+    ]
+  },
+  {
+    "student_id": "S102",
+    "name": "Alex Smith",
+    "course": "Data Mining 101",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 680,
+      "active_days": 22,
+      "resources_viewed": 18
+    },
+    "weakTopic": "Decision Trees",
+    "performance_timeline": [
+      { "stage": "20%", "score": 75, "risk": "Green" },
+      { "stage": "40%", "score": 60, "risk": "Yellow" }
+    ]
+  },
+  {
+    "student_id": "S103",
+    "name": "Bob Jones",
+    "course": "Machine Learning Fundamentals",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 530,
+      "active_days": 10,
+      "resources_viewed": 8
+    },
+    "weakTopic": "Neural Networks",
+    "performance_timeline": [
+      { "stage": "20%", "score": 68, "risk": "Yellow" },
+      { "stage": "40%", "score": 52, "risk": "Yellow" }
+    ]
+  },
+  {
+    "student_id": "S104",
+    "name": "Charlie Dave",
+    "course": "Environmental Studies",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 510,
+      "active_days": 5,
+      "resources_viewed": 3
+    },
+    "weakTopic": "Global Warming Context",
+    "performance_timeline": [
+      { "stage": "20%", "score": 45, "risk": "Red" },
+      { "stage": "40%", "score": 30, "risk": "Red" }
+    ]
+  },
+  {
+    "student_id": "S105",
+    "name": "Diana Prince",
+    "course": "Conservation Geography",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 500,
+      "active_days": 0,
+      "resources_viewed": 0
+    },
+    "weakTopic": "Environmentalism",
+    "performance_timeline": [
+      { "stage": "20%", "score": 0, "risk": "Black" },
+      { "stage": "40%", "score": 0, "risk": "Black" }
+    ]
+  },
+  {
+    "student_id": "S106",
+    "name": "Ethan Hunt",
+    "course": "Cyber Security Principles",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 695,
+      "active_days": 27,
+      "resources_viewed": 20
+    },
+    "weakTopic": "Cryptography",
+    "performance_timeline": [
+      { "stage": "20%", "score": 88, "risk": "Green" },
+      { "stage": "40%", "score": 90, "risk": "Green" }
+    ]
+  },
+  {
+    "student_id": "S107",
+    "name": "Fiona Gallagher",
+    "course": "Data Mining 101",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 640,
+      "active_days": 18,
+      "resources_viewed": 15
+    },
+    "weakTopic": "Clustering Algorithms",
+    "performance_timeline": [
+      { "stage": "20%", "score": 80, "risk": "Green" },
+      { "stage": "40%", "score": 71, "risk": "Green" }
+    ]
+  },
+  {
+    "student_id": "S108",
+    "name": "George Clark",
+    "course": "Machine Learning Fundamentals",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 590,
+      "active_days": 14,
+      "resources_viewed": 11
+    },
+    "weakTopic": "Linear Regression",
+    "performance_timeline": [
+      { "stage": "20%", "score": 72, "risk": "Green" },
+      { "stage": "40%", "score": 65, "risk": "Yellow" }
+    ]
+  },
+  {
+    "student_id": "S109",
+    "name": "Hannah Abbott",
+    "course": "Conservation Geography",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 540,
+      "active_days": 15,
+      "resources_viewed": 14
+    },
+    "weakTopic": "Historical context of Geography",
+    "performance_timeline": [
+      { "stage": "20%", "score": 60, "risk": "Yellow" },
+      { "stage": "40%", "score": 58, "risk": "Yellow" }
+    ]
+  },
+  {
+    "student_id": "S110",
+    "name": "Ian Malcolm",
+    "course": "Environmental Studies",
+    "stage": "40%",
+    "engagement": {
+      "clicks": 670,
+      "active_days": 26,
+      "resources_viewed": 19
+    },
+    "weakTopic": "Ecosystem Dynamics",
+    "performance_timeline": [
+      { "stage": "20%", "score": 95, "risk": "Green" },
+      { "stage": "40%", "score": 91, "risk": "Green" }
+    ]
+  }
+]
