@@ -6,7 +6,7 @@ A full-stack web application that helps teachers identify at-risk students early
 
 ## 
 
-![App Screenshot](assets/App screenshot.png)
+![App Screenshot](assets/App-screenshot.png)
 
 ---
 
