@@ -6,7 +6,7 @@ A full-stack web application that helps teachers identify at-risk students early
 
 ## 
 
-![App Screenshot](assets/App_screenshot.png)
+![App Screenshot](assets/App screenshot.png)
 
 ---
 
@@ -31,8 +31,8 @@ Risk is computed from a simple, transparent, explainable formula (not a black bo
 
 ```
 frontend/          React + Vite + Tailwind CSS
-backend/            Node.js + Express + MongoDB (Mongoose)
-Database:            MongoDB Atlas (cloud-hosted)
+backend/           Node.js + Express + MongoDB (Mongoose)
+Database:          MongoDB Atlas (cloud-hosted)
 ```
 
 **Auth:** JWT-based sessions (2-hour expiry), role-based routing (student/teacher), bcrypt password hashing.
@@ -152,5 +152,3 @@ npm run dev
 ```
 
 Requires a `.env` file in `backend/` with `MONGO_URI`, `JWT_SECRET`, and `PORT`; and a `.env` file in `frontend/` with `VITE_API_URL`.
-
-For deployment instructions, see `DEPLOYMENT_GUIDE.md`.
