@@ -5,24 +5,25 @@ import {
 } from 'recharts';
 import { Users, FileWarning, Search, Filter, AlertOctagon, Check } from 'lucide-react';
 import StudentProfileModal from '../components/StudentProfileModal';
+import InterventionsModal from '../components/InterventionsModal';
 
 const TeacherDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRisks, setSelectedRisks] = useState([]);
+  const [selectedCourses, setSelectedCourses] = useState([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [isInterventionsOpen, setIsInterventionsOpen] = useState(false);
 
   const filterRef = useRef(null);
-
 
   useEffect(() => {
     // Fetch Teacher Overview Data
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     axios.get(`${API_URL}/api/dashboard/teacher/overview`)
       .then(res => {
-
         setData(res.data);
         setLoading(false);
       })
@@ -61,6 +62,7 @@ const TeacherDashboard = () => {
   };
 
   const riskOptions = ['Green', 'Yellow', 'Red', 'Black'];
+  const courseOptions = data?.students ? [...new Set(data.students.map(s => s.course).filter(Boolean))] : [];
 
   const handleRiskToggle = (risk) => {
     if (selectedRisks.includes(risk)) {
@@ -70,7 +72,20 @@ const TeacherDashboard = () => {
     }
   };
 
-  // Client-side multi-field Search + Status Filter
+  const handleCourseToggle = (course) => {
+    if (selectedCourses.includes(course)) {
+      setSelectedCourses(selectedCourses.filter(c => c !== course));
+    } else {
+      setSelectedCourses([...selectedCourses, course]);
+    }
+  };
+
+  const totalActiveFilters = selectedRisks.length + selectedCourses.length;
+  const interventionCount = data?.students 
+    ? data.students.filter(s => s.risk === 'Red' || s.risk === 'Black').length 
+    : 0;
+
+  // Client-side multi-field Search + Status & Course Filter (AND)
   const filteredStudents = data.students.filter(student => {
     const query = searchTerm.toLowerCase().trim();
     
@@ -82,9 +97,12 @@ const TeacherDashboard = () => {
       (student.weakTopic && student.weakTopic.toLowerCase().includes(query));
 
     // Filter matches selected risk statuses (empty means show all)
-    const matchesFilter = selectedRisks.length === 0 || selectedRisks.includes(student.risk);
+    const matchesStatus = selectedRisks.length === 0 || selectedRisks.includes(student.risk);
 
-    return matchesSearch && matchesFilter;
+    // Filter matches selected courses (empty means show all)
+    const matchesCourse = selectedCourses.length === 0 || selectedCourses.includes(student.course);
+
+    return matchesSearch && matchesStatus && matchesCourse;
   });
 
   return (
@@ -113,12 +131,17 @@ const TeacherDashboard = () => {
             <div className="p-4 bg-rose-600 text-white rounded-xl shadow-lg"><AlertOctagon size={24}/></div>
             <div>
               <div className="text-sm font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wide">Dropout Alerts Detected</div>
-              <div className="text-lg font-bold text-rose-900 dark:text-rose-200">5 students dormant across the timeline! action required immediately.</div>
+              <div className="text-lg font-bold text-rose-900 dark:text-rose-200">
+                {interventionCount} {interventionCount === 1 ? 'student' : 'students'} dormant across the timeline! action required immediately.
+              </div>
             </div>
           </div>
-          <button className="px-6 py-2 bg-rose-600 text-white text-sm font-bold tracking-wide rounded-lg hover:bg-rose-700 transition-colors shadow flex items-center gap-2">
+          <button 
+            onClick={() => setIsInterventionsOpen(true)}
+            className="px-6 py-2 bg-rose-600 text-white text-sm font-bold tracking-wide rounded-lg hover:bg-rose-700 transition-colors shadow flex items-center gap-2 cursor-pointer"
+          >
             View Interventions
-            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">5</span>
+            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">{interventionCount}</span>
           </button>
         </div>
       </div>
@@ -178,49 +201,85 @@ const TeacherDashboard = () => {
                 <button 
                   onClick={() => setIsFilterOpen(!isFilterOpen)}
                   className={`p-2 border rounded-lg transition-colors flex items-center gap-1 ${
-                    selectedRisks.length > 0
+                    totalActiveFilters > 0
                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-semibold'
                       : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
-                  title="Filter by Status"
+                  title="Filter by Status & Course"
                 >
                   <Filter size={18} />
-                  {selectedRisks.length > 0 && (
+                  {totalActiveFilters > 0 && (
                     <span className="text-xs bg-indigo-600 text-white rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                      {selectedRisks.length}
+                      {totalActiveFilters}
                     </span>
                   )}
                 </button>
 
                 {/* Filter Popover Panel */}
                 {isFilterOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 p-3 space-y-2">
-                    <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider px-1">Filter Status</div>
-                    <div className="space-y-1">
-                      {riskOptions.map(risk => {
-                        const isChecked = selectedRisks.includes(risk);
-                        return (
-                          <label 
-                            key={risk} 
-                            onClick={() => handleRiskToggle(risk)}
-                            className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200 select-none"
-                          >
-                            <input 
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {}}
-                              className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                            />
-                            <span className={`px-2 py-0.5 text-xs font-bold rounded-md border ${riskStyles[risk]}`}>
-                              {risk}
-                            </span>
-                          </label>
-                        );
-                      })}
+                  <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Status Column */}
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider px-1">Status</div>
+                        <div className="space-y-1">
+                          {riskOptions.map(risk => {
+                            const isChecked = selectedRisks.includes(risk);
+                            return (
+                              <label 
+                                key={risk} 
+                                onClick={() => handleRiskToggle(risk)}
+                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200 select-none"
+                              >
+                                <input 
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {}}
+                                  className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                />
+                                <span className={`px-2 py-0.5 text-xs font-bold rounded-md border ${riskStyles[risk]}`}>
+                                  {risk}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Thin Vertical Divider + Course Column */}
+                      <div className="pl-4 border-l border-slate-200 dark:border-slate-700 space-y-2">
+                        <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider px-1">Course</div>
+                        <div className="space-y-1">
+                          {courseOptions.map(course => {
+                            const isChecked = selectedCourses.includes(course);
+                            return (
+                              <label 
+                                key={course} 
+                                onClick={() => handleCourseToggle(course)}
+                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200 select-none"
+                              >
+                                <input 
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {}}
+                                  className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                />
+                                <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">
+                                  {course}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
-                    {selectedRisks.length > 0 && (
+
+                    {totalActiveFilters > 0 && (
                       <button 
-                        onClick={() => setSelectedRisks([])}
+                        onClick={() => {
+                          setSelectedRisks([]);
+                          setSelectedCourses([]);
+                        }}
                         className="w-full text-center text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:text-indigo-800 dark:hover:text-indigo-300 pt-2 border-t border-slate-100 dark:border-slate-800"
                       >
                         Clear Filters
@@ -295,6 +354,16 @@ const TeacherDashboard = () => {
         <StudentProfileModal 
           student={selectedStudent} 
           onClose={() => setSelectedStudent(null)} 
+        />
+      )}
+
+      {/* View Interventions Modal */}
+      {isInterventionsOpen && (
+        <InterventionsModal 
+          isOpen={isInterventionsOpen} 
+          onClose={() => setIsInterventionsOpen(false)} 
+          students={data.students}
+          classAverages={data.classAverages}
         />
       )}
     </div>

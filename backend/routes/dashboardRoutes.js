@@ -92,10 +92,29 @@ router.get('/teacher/overview', auth, async (req, res) => {
       trend: s.trend || 'stable' // Placeholder pending multi-sync historical data
     }));
 
+    // Calculate on-the-fly class averages across all students
+    let totalClicks = 0;
+    let totalActiveDays = 0;
+    let totalResourcesViewed = 0;
+
+    students.forEach(s => {
+      const eng = s.engagement || {};
+      totalClicks += (eng.clicks || 0);
+      totalActiveDays += (eng.active_days || 0);
+      totalResourcesViewed += (eng.resources_viewed || 0);
+    });
+
+    const classAverages = {
+      clicks: totalCohort > 0 ? Math.round(totalClicks / totalCohort) : 0,
+      activeDays: totalCohort > 0 ? Math.round(totalActiveDays / totalCohort) : 0,
+      resourcesViewed: totalCohort > 0 ? Math.round(totalResourcesViewed / totalCohort) : 0
+    };
+
     return res.json({
       totalCohort,
       atRiskRate,
       distribution,
+      classAverages,
       students: studentList
     });
 

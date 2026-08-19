@@ -7,3 +7,5 @@ dist/
 backend/.env
 frontend/.env
 mogoDB-connection-string.txt
+/start-dwdm.bat
+*.lnk

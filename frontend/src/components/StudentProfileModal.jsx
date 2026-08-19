@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { 
-  X, ChevronDown, ChevronUp, User, BookOpen, MousePointer, Calendar, AlertTriangle, AlertCircle, CheckCircle, Info 
+  X, ChevronDown, ChevronUp, User, BookOpen, MousePointer, Calendar, AlertTriangle, AlertCircle, CheckCircle, Info, FileText, Send, Lock
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -13,6 +14,55 @@ const StudentProfileModal = ({ student, onClose }) => {
     engagement: false,
     risk: false
   });
+
+  const [notes, setNotes] = useState([]);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const [submittingNote, setSubmittingNote] = useState(false);
+
+  useEffect(() => {
+    if (!student?.id) return;
+    const fetchNotes = async () => {
+      setLoadingNotes(true);
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const token = localStorage.getItem('token');
+        const res = await axios.get(`${API_URL}/api/notes/${student.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setNotes(res.data || []);
+      } catch (err) {
+        console.error("Error fetching notes:", err);
+      } finally {
+        setLoadingNotes(false);
+      }
+    };
+    fetchNotes();
+  }, [student?.id]);
+
+  const handleAddNote = async (e) => {
+    e.preventDefault();
+    if (!newNoteText.trim() || submittingNote) return;
+
+    setSubmittingNote(true);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const token = localStorage.getItem('token');
+      const res = await axios.post(`${API_URL}/api/notes`, {
+        student_id: student.id,
+        text: newNoteText.trim()
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setNotes(prev => [res.data, ...prev]);
+      setNewNoteText('');
+    } catch (err) {
+      console.error("Error saving note:", err);
+    } finally {
+      setSubmittingNote(false);
+    }
+  };
 
   if (!student) return null;
 
@@ -246,6 +296,63 @@ const StudentProfileModal = ({ student, onClose }) => {
               ) : (
                 <div className="h-full flex items-center justify-center text-xs text-slate-400">
                   No timeline data recorded
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Teacher Notes Section (Private, Per-Teacher) */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mt-4 space-y-4 transition-colors duration-200">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <FileText size={18} className="text-indigo-600 dark:text-indigo-400" />
+                <span>Teacher Notes</span>
+              </h4>
+              <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
+                <Lock size={12} /> Private to you
+              </span>
+            </div>
+
+            {/* Note Input Form */}
+            <form onSubmit={handleAddNote} className="space-y-2">
+              <textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                disabled={submittingNote}
+                placeholder="Add a private note about this student..."
+                rows={3}
+                className="w-full p-3 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none transition-colors"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={!newNoteText.trim() || submittingNote}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Send size={14} />
+                  {submittingNote ? 'Saving...' : 'Save Note'}
+                </button>
+              </div>
+            </form>
+
+            {/* Notes History */}
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              {loadingNotes ? (
+                <div className="text-center py-4 text-xs text-slate-400">Loading notes...</div>
+              ) : notes.length > 0 ? (
+                notes.map((note) => (
+                  <div key={note._id} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1">
+                    <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono">
+                      <span>{new Date(note.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
+                      {note.text}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-400 font-medium">
+                  No notes yet.
                 </div>
               )}
             </div>

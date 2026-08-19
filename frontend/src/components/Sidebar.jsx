@@ -24,10 +24,10 @@ const Sidebar = () => {
   const visibleNavItems = navItems.filter((item) => user && item.role === user.role);
 
   return (
-    <div className="w-64 bg-slate-900 text-slate-300 flex flex-col pt-6 border-r border-slate-800">
+    <div className="w-64 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 flex flex-col pt-6 border-r border-slate-200 dark:border-slate-800 transition-colors duration-200">
       <div className="px-6 mb-8">
-        <h2 className="text-white text-2xl font-black tracking-tight flex items-center gap-2">
-          <Users className="text-indigo-500" />
+        <h2 className="text-slate-900 dark:text-white text-2xl font-black tracking-tight flex items-center gap-2">
+          <Users className="text-indigo-600 dark:text-indigo-500" />
           EWS Platform
         </h2>
       </div>
@@ -43,20 +43,20 @@ const Sidebar = () => {
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                 isActive 
                   ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20' 
-                  : 'hover:bg-slate-800 hover:text-white'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Icon size={20} className={isActive ? 'text-indigo-200' : 'text-slate-400'} />
+              <Icon size={20} className={isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'} />
               <span className="font-medium">{item.name}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800 space-y-2">
+      <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
         <button
           onClick={toggleTheme}
-          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors font-medium text-sm"
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors font-medium text-sm"
         >
           <span className="flex items-center gap-3">
             {isDarkMode ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} />}
@@ -66,13 +66,13 @@ const Sidebar = () => {
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-rose-400 transition-colors font-medium text-sm"
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-600 dark:hover:text-rose-400 transition-colors font-medium text-sm"
         >
           <LogOut size={18} />
           <span>Log Out</span>
         </button>
 
-        <p className="text-xs text-slate-500 text-center font-medium tracking-wide pt-1">
+        <p className="text-xs text-slate-400 dark:text-slate-500 text-center font-medium tracking-wide pt-1">
           v1.2 Predictive Model Active
         </p>
       </div>
@@ -81,5 +81,6 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
+
 
 
