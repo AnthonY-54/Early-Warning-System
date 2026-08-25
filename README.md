@@ -1,10 +1,8 @@
 # DWDM: Academic Performance & At-Risk Student Analytics Dashboard
 
-A full-stack web application that helps teachers identify at-risk students early, and gives students visibility into their own predicted risk of falling behind — built on a simulated academic data pipeline (Student LMS data → risk scoring → dashboards) that mirrors how a real early-warning system would work.
+A full-stack web application that helps teachers identify at-risk students early, provides detailed explainability insights, and gives students visibility into their own predicted risk of falling behind — built on a predictive academic data pipeline (OULAD dataset feature contract → ML model prediction service → MongoDB → interactive dashboards).
 
 ---
-
-## 
 
 ![App Screenshot](assets/App-screenshot.png)
 
@@ -20,57 +18,93 @@ https://dwdm-frontend.vercel.app/
 
 Two roles, two experiences:
 
-- **Students** sign up with a unique Student ID, and immediately get a dashboard showing their engagement metrics, performance timeline, predicted risk level, and personalized feedback.
-- **Teachers** sign up with a verified Teacher ID, and get a class-wide register of every student — searchable, filterable by risk level, with a detailed per-student profile view (demographics, enrollment info, engagement, and full risk breakdown) available on demand.
+- **Students** sign up with a unique Student ID and immediately get a dashboard showing their engagement metrics, performance timeline, predicted risk level, and personalized feedback.
+- **Teachers** sign up with a verified Teacher ID and get a comprehensive cohort early warning system:
+  - Multi-criteria filtering (Course + Status) and free-text search across all students.
+  - **Analyze Profile Modal**: Detailed student demographics, engagement metrics, progressive timeline charts, and **private teacher notes**.
+  - **Priority Interventions Panel**: Real-time cohort alerts for high-risk students, side-by-side engagement comparisons against class averages, and **model-driven risk diagnosis (`top_reasons`)**.
 
-Risk is computed from a simple, transparent, explainable formula (not a black box) — deliberately built this way so that every risk label shown to a user can be traced back to a reason, not just a number.
+Risk is computed via a trained Machine Learning model (or a transparent fallback formula when offline), providing real SHAP-driven explainability so that every flagged risk status is accompanied by clear, plain-English reasons.
 
 ---
 
 ## Architecture
 
 ```
-frontend/          React + Vite + Tailwind CSS
-backend/           Node.js + Express + MongoDB (Mongoose)
+frontend/          React + Vite + Tailwind CSS (Port 5173)
+backend/           Node.js + Express + MongoDB Mongoose (Port 5000)
+ml-service/        Python + FastAPI + Scikit-Learn/SHAP (Port 8000)
 Database:          MongoDB Atlas (cloud-hosted)
 ```
 
 **Auth:** JWT-based sessions (2-hour expiry), role-based routing (student/teacher), bcrypt password hashing.
 
-**Data flow (the interesting part):**
+### Data Flow & ML Integration:
 
 ```
-Signup (student_id provided)
+Student Registration (student_id provided)
         │
         ▼
-Validate ID exists in a simulated external LMS (fake_lms_data.json)
+Validate ID in simulated LMS dataset (fakeLmsData.json)
         │
         ▼
-Copy that student's data into our own MongoDB (one-time sync)
+Extract OULAD features & per-milestone academic/behavioral snapshots
         │
         ▼
-Compute probability, risk_level, and feedback right then
-   (placeholder formula — see "Design Decisions" below)
+HTTP POST to Python FastAPI ML Service (/predict) [Sequential per milestone]
+        ├── Success ──► Real probability, risk level & SHAP top_reasons
+        └── Offline/Error ──► Graceful fallback calculation (logged server-side)
         │
         ▼
-Stored permanently on the Student document — read by both
-the student's own dashboard AND the teacher's class-wide view
+Save synced document & milestone predictions into MongoDB Student collection
+        │
+        ▼
+Reshaped dynamically by backend API layer for Student & Teacher Dashboards
 ```
-
-This mirrors how a real system would work: an external LMS periodically feeds data in, a model scores it, and the app serves pre-computed results rather than recalculating on every page load.
 
 ---
 
-## Features
+## Key Features
 
-- **Authentication & RBAC** — separate signup flows for students (email + password + Student ID) and teachers (email + password + verified Teacher ID), JWT sessions, protected routes, role-locked dashboards.
-- **Simulated LMS data sync** — student academic data is "pulled" from a stand-in external LMS at signup time, mirroring a real integration boundary without building one.
-- **Student Dashboard** — engagement metrics, performance timeline (chart), computed risk level, and generated feedback text, scoped strictly to the logged-in student (identity-driven via JWT, not a URL parameter — no student can view another's data by design).
-- **Teacher Dashboard** — real, aggregated cohort stats (total students, at-risk rate, risk distribution), a searchable and filterable student register.
-  - **Search** — instant, client-side, matches across name, ID, course, and weak topic.
-  - **Filter** — by risk level (Green/Yellow/Red/Black), combinable with search.
-- **Analyze Profile** — a detailed per-student modal: identity sidebar, three independently-expandable info cards (Enrollment, Engagement, Risk & Performance), and a performance-over-time chart.
-- **Dark/Light theme toggle** — applies app-wide, Tailwind `dark:` variant based.
+### 1. Authentication & Role-Based Access Control (RBAC)
+- Dedicated registration flows for students (Student ID validation) and teachers (verified Teacher ID check).
+- JWT session management, protected routes, and role-locked views.
+
+### 2. Student Dashboard
+- Real-time risk status badge (Green, Yellow, Red, Black).
+- Engagement snapshot (Total VLE clicks, active days, resources viewed).
+- Progressive prediction timeline chart over assessment stages.
+- Adaptive personalized feedback text based on confidence and risk level.
+
+### 3. Teacher Dashboard
+- Cohort aggregate cards (Total cohort, at-risk rate, real-time dropout alerts banner).
+- Risk distribution donut chart (recharts).
+- **Combined Course + Status Filter**: Two-column side-by-side popover with dynamic course options, multi-select status toggles, combined filter badge counters, and combined `AND` search filtering.
+
+### 4. Analyze Profile & Private Teacher Notes
+- Student demographic breakdown (Age band, education, IMD band) and enrollment info.
+- Expandable engagement metrics and risk cards.
+- **Private Teacher Notes**: Append-only, timestamped, multi-line notes strictly scoped per `(student_id, teacher_id)` pair with server-side authorization enforcement.
+
+### 5. Priority Interventions Panel & Model Explainability
+- **Cohort List View**: Filtered to Red and Black risk students, sorted by priority (Black risk first).
+- **Student Detail View**:
+  - **Section A (Engagement Snapshot)**: Student metrics compared side-by-side against dynamically calculated class averages.
+  - **Section B (Model Risk Diagnosis)**: Surfaces top 3 SHAP explainability reasons with category icons (`FileText`, `MousePointer`, `Calendar`, `BookOpen`, `Flag`) and proportional visual impact bars.
+  - **Section C (Suggested Actions)**: Action recommendations and interactive cards with 3D CSS flip animation.
+
+---
+
+## What's New in Cycle 2
+
+Cycle 2 introduced major analytical, architectural, and UI enhancements:
+
+- **Phase 1 — Combined Course + Status Filtering**: Two-column popover layout with dynamic course extraction, combined AND logic, and multi-filter clearing.
+- **Phase 2 — View Interventions Modal**: Interactive two-screen modal with cohort list view, student detail comparisons, on-the-fly class averages, and card flip UI.
+- **Phase 3 — Private Teacher Notes**: Dedicated Mongoose `Note` schema and API routes (`/api/notes`) enabling teachers to leave private, persistent profile notes.
+- **Phase 4 — Student Schema Redesign**: Redesigned `Student` schema to align 1:1 with OULAD dataset features (`code_module`, `code_presentation`, `region`, `studied_credits`, etc.) and multi-stage `milestones[]`.
+- **Phase 5 — Real ML Model Integration**: Connected Node backend to Python FastAPI ML service (`POST /predict`), computing real predictions and SHAP explainability at signup with graceful fallback.
+- **Phase 6 — Surfaced Explainability (`top_reasons`)**: Replaced placeholder weak topics with ranked model-driven diagnostic sentences and proportional impact bars.
 
 ---
 
@@ -79,76 +113,89 @@ This mirrors how a real system would work: an external LMS periodically feeds da
 ```text
 DWDM/
 ├── backend/
-│   ├── data/                    # Simulated external systems (valid teacher IDs, fake LMS data)
-│   ├── middleware/               # JWT auth middleware
-│   ├── models/                   # Mongoose schemas (User, Student, Prediction)
-│   ├── routes/                   # authRoutes, dashboardRoutes
-│   ├── services/                 # riskEvaluationService, feedbackService
-│   └── server.js
+│   ├── data/                    # Simulated LMS data (fakeLmsData.json), valid teacher IDs
+│   ├── middleware/              # JWT auth middleware
+│   ├── models/                  # Mongoose schemas (User, Student, Note)
+│   ├── routes/                  # authRoutes, dashboardRoutes, noteRoutes
+│   ├── services/                # mlPredictionService, riskEvaluationService, feedbackService
+│   ├── .env.example             # Environment configuration template
+│   └── server.js                # Express app entry point
 ├── frontend/
 │   └── src/
-│       ├── components/           # Sidebar, ProtectedRoute, etc.
-│       ├── context/               # Auth state
-│       └── pages/                 # Login, Signup, StudentDashboard, TeacherDashboard
-├── start-dwdm.bat                # One-click local dev startup (Windows)
-└── DEPLOYMENT_GUIDE.md
+│       ├── components/          # InterventionsModal, StudentProfileModal, Sidebar, ProtectedRoute
+│       ├── context/             # AuthContext, ThemeContext
+│       └── pages/               # Login, Signup, StudentDashboard, TeacherDashboard
+├── batch files/
+│   ├── start-dwdm.bat           # Starts Frontend + Backend (2 servers)
+│   ├── start-dwdm-all.bat       # Starts Frontend + Backend + FastAPI ML Service (3 servers)
+│   └── README.md                # Batch script documentation
+├── start-dwdm.bat               # Root launcher convenience copy
+└── README.md
+```
+
+---
+
+## Local Development
+
+### 1. Prerequisites
+- Node.js (v18+) & npm
+- Python 3.9+ (if running the ML service locally)
+- MongoDB Atlas connection string or local MongoDB instance
+
+### 2. Setup Environment Variables
+In `backend/.env`:
+```env
+PORT=5000
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret_key
+FRONTEND_URL=http://localhost:5173
+ML_SERVICE_URL=http://localhost:8000
+```
+
+In `frontend/.env`:
+```env
+VITE_API_URL=http://localhost:5000
+```
+
+### 3. One-Click Startup (Windows)
+
+- **Standard Stack (Node + React)**:
+  Double-click `start-dwdm.bat`
+- **Full Stack (FastAPI ML Service + Node + React)**:
+  Double-click `start-dwdm-all.bat`
+
+### 4. Manual Startup
+
+```bash
+# Terminal 1: Python ML Model Service (optional, fallback available if skipped)
+cd ../at-risk-student-model
+uvicorn api.main:app --port 8000 --reload
+
+# Terminal 2: Backend
+cd backend
+npm install
+npm run dev
+
+# Terminal 3: Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
 
 ## Design Decisions Worth Knowing About
 
-This project was built in disciplined, spec-first phases — every non-trivial decision was deliberated before being built, not improvised. A few worth calling out explicitly, since they were conscious trade-offs, not oversights:
-
-- **The risk/probability formula is a deliberate placeholder**, not a real ML model. It's derived from real synced data (`probability = (100 - latest_score) / 100`), so it's not random — but it's intentionally simple and clearly commented as a stand-in. The actual trained ML model (built separately, handling feature-based prediction from real student marks) is **not** integrated into this app by design — that integration is logged as explicit future work, not a gap I overlooked.
-- **The "external LMS" is a static JSON file**, not a live API — a deliberate simulation of an integration boundary that would, in a real deployment, be a network call to a genuinely separate system. Keeping this boundary conceptually real (even while faking the data source) meant the eventual swap-in of a real LMS wouldn't require re-architecting anything.
-- **Client-side search/filter, not server-side** — with the current data scale (a single shared teacher roster, no pagination needs), client-side filtering is objectively simpler and faster, not a corner cut. Documented explicitly as scale-appropriate, not a shortcut.
-- **All teachers see the full student roster** (no per-teacher scoping) — a deliberate scope decision for this stage of the project, not a missing feature. Per-teacher/per-course visibility is logged as future work.
+- **Spec-First Engineering**: Every phase was designed and locked in a formal specification before code execution, ensuring clear API contracts and zero regressions across cycles.
+- **Multi-Service Resilience**: The Node backend communicates with the Python ML service with a strict timeout and automatic fallback to placeholder formulas, ensuring student registration never fails even if the ML service is offline.
+- **Backend Data Reshaping**: Schema migrations (e.g. flat OULAD fields and `milestones` array) were reshaped at the API route layer, keeping frontend components decoupled and stable.
+- **Server-Enforced Note Privacy**: Teacher notes are strictly scoped per `(student_id, teacher_id)` on the server query level, preventing cross-teacher data leaks.
 
 ---
 
 ## Known Limitations / Future Work
 
-Logged deliberately, not forgotten:
-
-- Real ML model integration (replacing the placeholder probability formula)
-- Real external LMS integration (replacing the static fake-data file with an actual network integration)
-- Weekly/periodic re-sync of student data (currently syncs once, at signup)
-- Per-teacher student/course scoping (currently: all teachers see all students)
-- "View Interventions" panel (UI exists, not yet functional)
-- Teacher actions on a student's profile (notes, flags — profile is currently read-only)
-- Combined Course + Status filtering on the teacher dashboard (currently Status-only)
-- Theme persistence across sessions (currently resets to light on every reload)
-
----
-
-## Developer Lessons & Takeaways
-
-##### 1. Spec-first discipline pays off with AI coding tools
-Every phase of this project was fully discussed and locked into a written spec *before* being handed to an AI coding assistant (Antigravity) for implementation. This caught a lot of ambiguity upfront — e.g., deciding *when* a student's risk score gets computed (at sync time, not on every page load) mattered a lot for correctness, and would've been easy to get wrong if left to be improvised mid-build.
-
-##### 2. Two databases, one door
-Modeling "our app's database" and "the external LMS" as two genuinely separate concepts (even though the LMS is currently just a JSON file) made the eventual real integration a clearly-scoped future task instead of an architectural rewrite. It's tempting to just merge fake external data straight into your own database for convenience — resisting that kept the system's real shape honest.
-
-##### 3. Not every risk score needs a real model to be useful (for now)
-Building the app around clearly-labeled placeholder logic (transparent formula, commented as temporary, real ML model explicitly deferred) meant the whole pipeline — signup → sync → compute → store → display — could be fully built, tested, and verified end-to-end, without being blocked on a separate, harder ML integration effort.
-
----
-
-## Local Development
-
-See `start-dwdm.bat` for one-click local startup (Windows), or run manually:
-
-```bash
-# Backend
-cd backend
-npm install
-npm run dev
-
-# Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev
-```
-
-Requires a `.env` file in `backend/` with `MONGO_URI`, `JWT_SECRET`, and `PORT`; and a `.env` file in `frontend/` with `VITE_API_URL`.
+- Weekly/periodic automated re-sync of student records from external LMS.
+- Interactive multi-stage milestone historical timeline for ML explainability.
+- Multi-teacher collaborative team notes option (toggleable privacy).
+- Automated email notification triggers from the intervention panel.

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { X, ArrowLeft, MousePointer, BookOpen, Calendar, AlertTriangle, Sparkles, Mail, RefreshCw } from 'lucide-react';
+import { 
+  X, ArrowLeft, MousePointer, BookOpen, Calendar, AlertTriangle, Mail, RefreshCw, FileText, Flag, AlertCircle 
+} from 'lucide-react';
 
 const InterventionsModal = ({ isOpen, onClose, students = [], classAverages = {} }) => {
   const [currentView, setCurrentView] = useState('list'); // 'list' | 'detail'
@@ -13,6 +15,38 @@ const InterventionsModal = ({ isOpen, onClose, students = [], classAverages = {}
     'Yellow': 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
     'Red': 'bg-rose-100 text-rose-800 border-rose-200 animate-pulse dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800',
     'Black': 'bg-slate-800 text-white border-slate-900 line-through decoration-slate-500 dark:bg-slate-950 dark:text-slate-200'
+  };
+
+  // Helper to map ML feature family to Lucide category icons
+  const getReasonIcon = (feature) => {
+    if (!feature) return <AlertCircle size={16} className="text-slate-500" />;
+    const baseCode = feature.replace(/\d+$/, '').trim();
+
+    switch (baseCode) {
+      case 'AS':
+      case 'RS':
+      case 'LS':
+        return <FileText size={16} className="text-indigo-500" />;
+      case 'SC':
+        return <MousePointer size={16} className="text-indigo-500" />;
+      case 'AD':
+      case 'AC':
+        return <Calendar size={16} className="text-amber-500" />;
+      case 'AR':
+        return <BookOpen size={16} className="text-emerald-500" />;
+      case 'registration_lag':
+      case 'is_repeat':
+      case 'studied_credits':
+      case 'imd_band':
+      case 'gender':
+      case 'region':
+      case 'highest_education':
+      case 'age_band':
+      case 'disability':
+        return <Flag size={16} className="text-rose-500" />;
+      default:
+        return <AlertCircle size={16} className="text-slate-500" />;
+    }
   };
 
   // Filter Red & Black risk students only, sort Black first then Red
@@ -218,20 +252,58 @@ const InterventionsModal = ({ isOpen, onClose, students = [], classAverages = {}
                   </div>
                 </div>
 
-                {/* Section B: Weak Topic */}
-                <div className="space-y-2">
+                {/* Section B: Model Risk Diagnosis (top_reasons) */}
+                <div className="space-y-3">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Section B — Weak Topic Analysis
+                    Section B — Model Risk Diagnosis
                   </h3>
-                  <div className="p-4 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 rounded-xl flex items-center gap-3">
-                    <Sparkles size={20} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                    <div>
-                      <div className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase">Primary Weak Area</div>
-                      <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                        {selectedStudent.weakTopic || 'No specific weak topic identified'}
+
+                  {(() => {
+                    const reasons = selectedStudent.top_reasons || [];
+                    if (!reasons || reasons.length === 0) {
+                      return (
+                        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-500 dark:text-slate-400">
+                          Detailed risk breakdown not available for this student's current record.
+                        </div>
+                      );
+                    }
+
+                    const impacts = reasons.map(r => Math.abs(Number(r.impact) || 0));
+                    const totalImpact = impacts.reduce((acc, curr) => acc + curr, 0);
+
+                    return (
+                      <div className="space-y-2.5">
+                        {reasons.slice(0, 3).map((item, idx) => {
+                          const impactVal = Math.abs(Number(item.impact) || 0);
+                          const widthPercent = totalImpact > 0 ? (impactVal / totalImpact) * 100 : 33.3;
+
+                          return (
+                            <div 
+                              key={idx} 
+                              className="p-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl space-y-2 transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg shrink-0 shadow-xs">
+                                  {getReasonIcon(item.feature)}
+                                </div>
+                                <p className="text-xs font-medium text-slate-800 dark:text-slate-200 flex-1 leading-relaxed">
+                                  {item.reason || "Underlying factor contributing to elevated risk profile."}
+                                </p>
+                              </div>
+
+                              {/* Proportional Impact Bar */}
+                              <div className="w-full bg-slate-200 dark:bg-slate-700/60 h-1.5 rounded-full overflow-hidden">
+                                <div 
+                                  className="bg-indigo-500 dark:bg-indigo-400 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(100, Math.max(8, widthPercent))}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Section C: Suggested Actions */}
@@ -251,10 +323,7 @@ const InterventionsModal = ({ isOpen, onClose, students = [], classAverages = {}
                           Suggest Extra Resources & Quizzes
                         </h4>
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pt-1">
-                          Recommend targeted remedial materials and self-assessment quizzes on{' '}
-                          <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                            {selectedStudent.weakTopic || 'weak topics'}
-                          </span>.
+                          Recommend targeted remedial materials and self-assessment practice quizzes to address flagged risk factors.
                         </p>
                       </div>
                       <div className="pt-2 text-xs font-medium text-slate-400 dark:text-slate-500 italic">

@@ -6,6 +6,8 @@ const User = require('../models/User');
 const Student = require('../models/Student');
 const VALID_TEACHER_IDS = require('../data/validTeacherIds');
 const FAKE_LMS_DATA = require('../data/fakeLmsData.json');
+const { evaluateRisk } = require('../services/riskEvaluationService');
+const { predictMilestones } = require('../services/mlPredictionService');
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
@@ -83,47 +85,31 @@ router.post('/register', async (req, res) => {
     if (role === 'student' && formattedStudentId) {
       const lmsRecord = FAKE_LMS_DATA.find(s => s.student_id === formattedStudentId);
       if (lmsRecord) {
-        // Phase 3 Analytics Computation (Sync Time)
-        // 1. Calculate placeholder probability from latest performance timeline score
-        // NOTE: This is a deliberate placeholder standing in for a real ML model (trained on student marks/features)
-        // that exists outside this project's scope and is not integrated here.
-        const timeline = lmsRecord.performance_timeline || [];
-        const latestEntry = timeline.length > 0 ? timeline[timeline.length - 1] : null;
-        const latestScore = latestEntry ? latestEntry.score : 70;
-        
-        const hasActivity = lmsRecord.engagement && lmsRecord.engagement.active_days > 0;
-        
-        let probability = 0;
-        if (hasActivity) {
-          // Clamp calculated fail probability between 0 and 1
-          probability = Math.max(0, Math.min(1, (100 - latestScore) / 100));
-        }
+        // Run ML model predictions (or graceful placeholder fallback) sequentially per milestone
+        const milestones = await predictMilestones(lmsRecord);
 
-        // 2. Evaluate risk using existing service logic
-        const riskLevel = evaluateRisk(probability, hasActivity);
-
-        // 3. Fixed constant confidence placeholder (0.80 / 80%) pending real model integration
-        const confidenceConstant = 0.80;
-
-        // 4. Generate feedback text using existing service logic
-        const feedbackText = generateFeedback(riskLevel, confidenceConstant, { weakTopic: lmsRecord.weakTopic });
-
-        // 5. Save all synced and analytical fields to Student document in MongoDB
+        // Save all new OULAD fields, display fields, and milestones to Student document in MongoDB
         await Student.findOneAndUpdate(
           { student_id: formattedStudentId },
           {
             student_id: lmsRecord.student_id,
             name: lmsRecord.name,
+            code_module: lmsRecord.code_module,
+            code_presentation: lmsRecord.code_presentation,
+            gender: lmsRecord.gender,
+            region: lmsRecord.region,
+            highest_education: lmsRecord.highest_education,
+            imd_band: lmsRecord.imd_band,
+            age_band: lmsRecord.age_band,
+            studied_credits: lmsRecord.studied_credits,
+            disability: lmsRecord.disability,
+            is_repeat: lmsRecord.is_repeat,
+            registration_lag: lmsRecord.registration_lag,
             course: lmsRecord.course,
             stage: lmsRecord.stage,
-            engagement: lmsRecord.engagement,
             weakTopic: lmsRecord.weakTopic,
-            performance_timeline: lmsRecord.performance_timeline,
-            probability,
-            risk_level: riskLevel,
-            confidence: confidenceConstant,
-            feedback: feedbackText,
-            trend: 'stable' // Placeholder pending multi-sync historical data
+            milestones,
+            enrollment_info: lmsRecord.enrollment_info || { status: 'Active' }
           },
           { upsert: true, new: true }
         );

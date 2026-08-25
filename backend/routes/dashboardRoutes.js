@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Student = require('../models/Student');
 const auth = require('../middleware/auth');
+const { generateFeedback } = require('../services/feedbackService');
 
 // Route: Get Logged-in Student Dashboard Data
 router.get('/student/me', auth, async (req, res) => {
@@ -21,20 +22,33 @@ router.get('/student/me', auth, async (req, res) => {
       return res.status(404).json({ message: 'Student data not found in database.' });
     }
 
-    // Return the real, persisted fields from MongoDB
-    const confidenceVal = student.confidence !== undefined ? student.confidence : 0.80;
+    // Sourced from current stage milestone
+    const currentMilestone = student.milestones?.find(m => m.stage === student.stage) || 
+      student.milestones?.[student.milestones.length - 1] || {};
+
+    const riskLevel = currentMilestone.risk_level || "Green";
+    const confidenceVal = currentMilestone.confidence !== undefined ? currentMilestone.confidence : 0.80;
+    const feedbackText = generateFeedback(riskLevel, confidenceVal, { weakTopic: student.weakTopic });
 
     return res.json({
       id: student.student_id,
       name: student.name,
       course: student.course || "General Studies",
       stage: student.stage || "40%",
-      probability: student.probability,
-      engagement: student.engagement || { clicks: 0, active_days: 0, resources_viewed: 0 },
-      performance_timeline: student.performance_timeline || [],
+      probability: currentMilestone.probability !== undefined ? currentMilestone.probability : 0,
+      engagement: {
+        clicks: currentMilestone.total_clicks || 0,
+        active_days: currentMilestone.active_days || 0,
+        resources_viewed: currentMilestone.resources_accessed || 0
+      },
+      performance_timeline: (student.milestones || []).map(m => ({
+        stage: m.stage,
+        score: m.assessment_score !== undefined ? m.assessment_score : 0,
+        risk: m.risk_level || 'Green'
+      })),
       weakTopic: student.weakTopic || "None",
-      risk_level: student.risk_level || "Green",
-      feedback: student.feedback || "",
+      risk_level: riskLevel,
+      feedback: feedbackText,
       confidence: (confidenceVal * 100).toFixed(1) + "%"
     });
 
@@ -51,15 +65,68 @@ router.get('/teacher/overview', auth, async (req, res) => {
 
     const totalCohort = students.length;
 
-    // Count students per risk level
+    // Count students per risk level and aggregate class averages
     const counts = { Green: 0, Yellow: 0, Red: 0, Black: 0 };
-    students.forEach(s => {
-      const r = s.risk_level || 'Green';
+    let totalClicks = 0;
+    let totalActiveDays = 0;
+    let totalResourcesViewed = 0;
+
+    // Format full student list reshaped for frontend components
+    const studentList = students.map(s => {
+      const currentMilestone = s.milestones?.find(m => m.stage === s.stage) || 
+        s.milestones?.[s.milestones.length - 1] || {};
+
+      const r = currentMilestone.risk_level || 'Green';
       if (counts[r] !== undefined) {
         counts[r]++;
       } else {
         counts['Green']++;
       }
+
+      const clicks = currentMilestone.total_clicks || 0;
+      const activeDays = currentMilestone.active_days || 0;
+      const resourcesViewed = currentMilestone.resources_accessed || 0;
+
+      totalClicks += clicks;
+      totalActiveDays += activeDays;
+      totalResourcesViewed += resourcesViewed;
+
+      const confidenceVal = currentMilestone.confidence !== undefined ? currentMilestone.confidence : 0.80;
+      const feedbackText = generateFeedback(r, confidenceVal, { weakTopic: s.weakTopic });
+
+      return {
+        id: s.student_id,
+        name: s.name,
+        prob: currentMilestone.probability !== undefined ? currentMilestone.probability : 0,
+        risk: r,
+        course: s.course || 'N/A',
+        weakTopic: s.weakTopic || 'N/A',
+        top_reasons: currentMilestone.top_reasons || [],
+        stage: s.stage || '40%',
+        demographics: {
+          age_band: s.age_band || 'N/A',
+          education: s.highest_education || 'N/A',
+          imd_band: s.imd_band || 'N/A'
+        },
+        enrollment_info: {
+          module: s.code_module || 'N/A',
+          presentation: s.code_presentation || 'N/A',
+          status: s.enrollment_info?.status || 'Active'
+        },
+        engagement: {
+          clicks,
+          active_days: activeDays,
+          resources_viewed: resourcesViewed
+        },
+        performance_timeline: (s.milestones || []).map(m => ({
+          stage: m.stage,
+          score: m.assessment_score !== undefined ? m.assessment_score : 0,
+          risk: m.risk_level || 'Green'
+        })),
+        confidence: confidenceVal,
+        feedback: feedbackText,
+        trend: 'stable' // Placeholder pending multi-sync historical data
+      };
     });
 
     // At-Risk Rate: percentage of students with risk other than Green
@@ -74,36 +141,6 @@ router.get('/teacher/overview', auth, async (req, res) => {
       { name: 'Black', value: totalCohort > 0 ? Math.round((counts.Black / totalCohort) * 100) : 0, fill: '#1f2937' }
     ];
 
-    // Format full student list for the table and profile modal
-    const studentList = students.map(s => ({
-      id: s.student_id,
-      name: s.name,
-      prob: s.probability !== undefined ? s.probability : 0,
-      risk: s.risk_level || 'Green',
-      course: s.course || 'N/A',
-      weakTopic: s.weakTopic || 'N/A',
-      stage: s.stage || '40%',
-      demographics: s.demographics || {},
-      enrollment_info: s.enrollment_info || {},
-      engagement: s.engagement || { clicks: 0, active_days: 0, resources_viewed: 0 },
-      performance_timeline: s.performance_timeline || [],
-      confidence: s.confidence !== undefined ? s.confidence : 0.80,
-      feedback: s.feedback || '',
-      trend: s.trend || 'stable' // Placeholder pending multi-sync historical data
-    }));
-
-    // Calculate on-the-fly class averages across all students
-    let totalClicks = 0;
-    let totalActiveDays = 0;
-    let totalResourcesViewed = 0;
-
-    students.forEach(s => {
-      const eng = s.engagement || {};
-      totalClicks += (eng.clicks || 0);
-      totalActiveDays += (eng.active_days || 0);
-      totalResourcesViewed += (eng.resources_viewed || 0);
-    });
-
     const classAverages = {
       clicks: totalCohort > 0 ? Math.round(totalClicks / totalCohort) : 0,
       activeDays: totalCohort > 0 ? Math.round(totalActiveDays / totalCohort) : 0,
@@ -117,8 +154,6 @@ router.get('/teacher/overview', auth, async (req, res) => {
       classAverages,
       students: studentList
     });
-
-
 
   } catch (error) {
     console.error('Error fetching teacher dashboard overview:', error);
