@@ -5,6 +5,8 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ProtectedRoute from './components/ProtectedRoute';
+import ChatbotWidget from './components/ChatbotWidget';
+// import ChatbotWidgetB from './components/ChatbotWidgetB'; // Module B (debug experiment, preserved)
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Sun, Moon } from 'lucide-react';
@@ -84,6 +86,8 @@ function AppContent() {
                   </Routes>
                 </main>
               </div>
+              <ChatbotWidget />
+              {/* <ChatbotWidgetB /> */}
             </div>
           </ProtectedRoute>
         }
