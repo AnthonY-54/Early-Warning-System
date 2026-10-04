@@ -2,19 +2,78 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Student = require('../models/Student');
+const Note = require('../models/Note');
 const auth = require('../middleware/auth');
+const { 
+  getCurrentMilestone, 
+  getCohortSummary, 
+  getStudentsByFilter 
+} = require('../utils/cohortUtils');
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 // Candidate models ordered by priority for automatic fallback
 const CANDIDATE_MODELS = Array.from(new Set([
   process.env.GROQ_MODEL,
+  'llama-3.3-70b-versatile',
   'qwen/qwen3.8-27b',
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b'
 ].filter(Boolean)));
 
-const FALLBACK_ERROR_MESSAGE = 'Looks like things went south on my side. Unlike you, I am a novice. Let me restart my engines. Go for it again.';
+const FALLBACK_ERROR_MESSAGE = 'Looks like things went south on my side. Unlike you, I am a newbie in job. Let me restart my engines. Go for it again.';
+
+/**
+ * Helper to invoke Groq API with candidate model fallback and 15s timeout
+ */
+async function callGroqWithFallback(payloadMessages, tools = null) {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  if (!groqApiKey || groqApiKey.trim() === '' || groqApiKey === 'your_groq_api_key_here') {
+    throw new Error('GROQ_API_KEY is missing or unconfigured in backend/.env.');
+  }
+
+  let lastError = null;
+
+  for (const modelId of CANDIDATE_MODELS) {
+    try {
+      console.log(`[Chatbot] Invoking Groq model: ${modelId}...`);
+      const body = {
+        model: modelId,
+        messages: payloadMessages
+      };
+
+      if (tools && tools.length > 0) {
+        body.tools = tools;
+        body.tool_choice = 'auto';
+      }
+
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn(`[Chatbot] Model ${modelId} returned HTTP ${response.status}: ${errText}`);
+        lastError = new Error(`Groq HTTP ${response.status}: ${errText}`);
+        continue;
+      }
+
+      const data = await response.json();
+      return { data, usedModel: modelId };
+    } catch (err) {
+      console.warn(`[Chatbot] Model ${modelId} failed: ${err.message}`);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('All candidate Groq models failed.');
+}
 
 /**
  * Route: POST /api/chatbot/student
@@ -22,30 +81,29 @@ const FALLBACK_ERROR_MESSAGE = 'Looks like things went south on my side. Unlike 
  */
 router.post('/student', auth, async (req, res) => {
   try {
-    console.log('[Chatbot] Incoming request from user:', req.user?.id, 'role:', req.user?.role);
+    console.log('[Chatbot Student] Incoming request from user:', req.user?.id, 'role:', req.user?.role);
 
     // 1. Enforce student role
     if (req.user?.role !== 'student') {
-      console.warn('[Chatbot] Rejected non-student role:', req.user?.role);
+      console.warn('[Chatbot Student] Rejected non-student role:', req.user?.role);
       return res.status(403).json({ message: 'Access denied. Student account required.' });
     }
 
     // 2. Fetch student profile
     const user = await User.findById(req.user.id);
     if (!user || !user.studentId) {
-      console.warn('[Chatbot] No studentId associated with user:', req.user.id);
+      console.warn('[Chatbot Student] No studentId associated with user:', req.user.id);
       return res.status(400).json({ message: 'No student record associated with this account.' });
     }
 
     const student = await Student.findOne({ student_id: user.studentId });
     if (!student) {
-      console.warn('[Chatbot] Student record not found in MongoDB for student_id:', user.studentId);
+      console.warn('[Chatbot Student] Student record not found in MongoDB for student_id:', user.studentId);
       return res.status(404).json({ message: 'Student data not found in database.' });
     }
 
     // Determine current milestone
-    const currentMilestone = student.milestones?.find(m => m.stage === student.stage) ||
-      student.milestones?.[student.milestones.length - 1] || {};
+    const currentMilestone = getCurrentMilestone(student);
 
     // Build scoped summary context
     const summaryContext = {
@@ -77,14 +135,6 @@ Student Summary Context:
 ${JSON.stringify(summaryContext, null, 2)}`
     };
 
-    const groqApiKey = process.env.GROQ_API_KEY;
-    if (!groqApiKey || groqApiKey.trim() === '' || groqApiKey === 'your_groq_api_key_here') {
-      console.warn('[Chatbot] GROQ_API_KEY is missing or unconfigured in backend/.env.');
-      return res.json({
-        reply: 'Groq API key is missing in backend/.env. Please configure GROQ_API_KEY=<your_key> and restart backend.'
-      });
-    }
-
     // Tools definition
     const tools = [
       {
@@ -103,48 +153,7 @@ ${JSON.stringify(summaryContext, null, 2)}`
 
     const messages = [systemPrompt, ...userMessages];
 
-    // Helper to invoke Groq API with model fallback list and 15s timeout
-    const callGroqWithFallback = async (payloadMessages) => {
-      let lastError = null;
-
-      for (const modelId of CANDIDATE_MODELS) {
-        try {
-          console.log(`[Chatbot] Invoking Groq model: ${modelId}...`);
-          const response = await fetch(GROQ_API_URL, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${groqApiKey.trim()}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              model: modelId,
-              messages: payloadMessages,
-              tools: tools,
-              tool_choice: 'auto'
-            }),
-            signal: AbortSignal.timeout(15000)
-          });
-
-          if (!response.ok) {
-            const errText = await response.text();
-            console.warn(`[Chatbot] Model ${modelId} returned HTTP ${response.status}: ${errText}`);
-            // If model error / not found, loop to next candidate model
-            lastError = new Error(`Groq HTTP ${response.status}: ${errText}`);
-            continue;
-          }
-
-          const data = await response.json();
-          return { data, usedModel: modelId };
-        } catch (err) {
-          console.warn(`[Chatbot] Model ${modelId} failed: ${err.message}`);
-          lastError = err;
-        }
-      }
-
-      throw lastError || new Error('All candidate Groq models failed.');
-    };
-
-    let { data: groqData } = await callGroqWithFallback(messages);
+    let { data: groqData } = await callGroqWithFallback(messages, tools);
     let choice = groqData?.choices?.[0];
     let responseMessage = choice?.message;
 
@@ -152,7 +161,7 @@ ${JSON.stringify(summaryContext, null, 2)}`
     if (responseMessage && responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
       const toolCall = responseMessage.tool_calls[0];
       if (toolCall.function?.name === 'getFullStudentRecord') {
-        console.log('[Chatbot] Tool call requested: getFullStudentRecord');
+        console.log('[Chatbot Student] Tool call requested: getFullStudentRecord');
         const fullRecord = {
           id: student.student_id,
           name: student.name,
@@ -197,7 +206,7 @@ ${JSON.stringify(summaryContext, null, 2)}`
           }
         ];
 
-        const { data: secondResponseData } = await callGroqWithFallback(updatedMessages);
+        const { data: secondResponseData } = await callGroqWithFallback(updatedMessages, tools);
         choice = secondResponseData?.choices?.[0];
         responseMessage = choice?.message;
       }
@@ -207,10 +216,234 @@ ${JSON.stringify(summaryContext, null, 2)}`
     return res.json({ reply });
 
   } catch (error) {
-    console.error('[Chatbot] Error processing request:', error.message);
+    console.error('[Chatbot Student] Error processing request:', error.message);
     const diagnosticReply = process.env.NODE_ENV === 'production'
       ? FALLBACK_ERROR_MESSAGE
-      : `Chatbot Error: ${error.message}`;
+      : (error.message.includes('GROQ_API_KEY') ? error.message : FALLBACK_ERROR_MESSAGE);
+    return res.json({ reply: diagnosticReply });
+  }
+});
+
+/**
+ * Route: POST /api/chatbot/teacher
+ * Protected teacher chatbot endpoint powered by Groq LLM with function-calling.
+ */
+router.post('/teacher', auth, async (req, res) => {
+  try {
+    console.log('[Chatbot Teacher] Incoming request from user:', req.user?.id, 'role:', req.user?.role);
+
+    // 1. Enforce teacher role
+    if (req.user?.role !== 'teacher') {
+      console.warn('[Chatbot Teacher] Rejected non-teacher role:', req.user?.role);
+      return res.status(403).json({ message: 'Access denied. Teacher account required.' });
+    }
+
+    // 2. Fetch minimal roster index only (name and ID only, no stats/metrics)
+    const studentsRoster = await Student.find({}, 'student_id name');
+    const rosterIndex = studentsRoster.map(s => ({
+      id: s.student_id,
+      name: s.name
+    }));
+
+    const rosterText = rosterIndex.length > 0
+      ? rosterIndex.map(s => `- [ID: ${s.id}] ${s.name}`).join('\n')
+      : 'No students currently enrolled.';
+
+    // 3. Construct Teacher System Prompt with guardrails and privacy notice
+    const systemPrompt = {
+      role: 'system',
+      content: `You are an academic assistant for the logged-in teacher, helping them understand their students' risk status, performance, and engagement, and suggesting interventions when asked.
+You must use the provided tools (getStudentDetails, getCohortSummary, getStudentsByFilter) to fetch real, authoritative data rather than guessing or hallucinating values. If a tool returns "not found" or insufficient data, say so plainly rather than inventing answers.
+
+Guardrails:
+- You must ONLY answer questions related to this teacher's students, cohort, and academic matters.
+- For anything off-topic, politely decline and redirect (e.g., "I can only help with your students' academic progress and risk status — ask me about that!").
+
+Privacy Safeguards:
+- Any teacher notes returned by getStudentDetails belong solely to the logged-in teacher.
+- You must never claim knowledge of another teacher's notes, and must never imply you have access to any notes beyond what is explicitly returned to you in this session.
+
+Roster Index (Students currently in your cohort):
+${rosterText}`
+    };
+
+    // 4. Define Teacher Tools
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'getStudentDetails',
+          description: 'Fetch detailed academic record, risk status, engagement metrics, class averages baseline, and the logged-in teacher\'s private notes for a specific student.',
+          parameters: {
+            type: 'object',
+            properties: {
+              name_or_id: {
+                type: 'string',
+                description: 'The student ID (e.g. S101) or name of the student.'
+              }
+            },
+            required: ['name_or_id']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'getCohortSummary',
+          description: 'Fetch aggregate cohort statistics including total student count, risk distribution counts (Green, Yellow, Red, Black), at-risk percentage, and class averages.',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'getStudentsByFilter',
+          description: 'Filter cohort students by course name and/or current risk level (Green, Yellow, Red, Black). Returns a concise list of matching student IDs, names, courses, and risk levels.',
+          parameters: {
+            type: 'object',
+            properties: {
+              course: {
+                type: 'string',
+                description: 'Optional course title or code to filter by (e.g., "Cyber Security Principles" or "BBB").'
+              },
+              risk_level: {
+                type: 'string',
+                enum: ['Green', 'Yellow', 'Red', 'Black'],
+                description: 'Optional risk level to filter by.'
+              }
+            },
+            required: []
+          }
+        }
+      }
+    ];
+
+    // Extract message history
+    const userMessages = Array.isArray(req.body.messages) ? req.body.messages : [];
+    let currentMessages = [systemPrompt, ...userMessages];
+
+    // Tool execution loop (supports up to 3 turns of tool calling)
+    let turns = 0;
+    const maxTurns = 3;
+    let finalReply = null;
+
+    while (turns < maxTurns) {
+      turns++;
+      const { data: groqData } = await callGroqWithFallback(currentMessages, tools);
+      const choice = groqData?.choices?.[0];
+      const responseMessage = choice?.message;
+
+      if (!responseMessage) {
+        break;
+      }
+
+      currentMessages.push(responseMessage);
+
+      // Check if tool calls were requested
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        for (const toolCall of responseMessage.tool_calls) {
+          const fnName = toolCall.function?.name;
+          let fnArgs = {};
+          try {
+            fnArgs = JSON.parse(toolCall.function?.arguments || '{}');
+          } catch (e) {
+            console.warn('[Chatbot Teacher] Failed to parse tool arguments:', toolCall.function?.arguments);
+          }
+
+          console.log(`[Chatbot Teacher] Executing tool: ${fnName}`, fnArgs);
+          let toolResult = null;
+
+          if (fnName === 'getStudentDetails') {
+            const query = (fnArgs.name_or_id || '').trim().toLowerCase();
+            let matched = rosterIndex.find(s => s.id.toLowerCase() === query);
+            if (!matched) {
+              matched = rosterIndex.find(s => s.name.toLowerCase() === query);
+            }
+            if (!matched) {
+              matched = rosterIndex.find(s => s.name.toLowerCase().includes(query) || s.id.toLowerCase().includes(query));
+            }
+
+            if (!matched) {
+              toolResult = {
+                error: 'not_found',
+                message: `Student '${fnArgs.name_or_id}' was not found in the cohort roster.`
+              };
+            } else {
+              const studentDoc = await Student.findOne({ student_id: matched.id });
+              if (!studentDoc) {
+                toolResult = {
+                  error: 'not_found',
+                  message: `Student record '${matched.id}' not found in database.`
+                };
+              } else {
+                const milestone = getCurrentMilestone(studentDoc);
+                // Strict teacher note privacy: filter strictly by teacher_id: req.user.id
+                const notes = await Note.find({
+                  student_id: studentDoc.student_id,
+                  teacher_id: req.user.id
+                }).sort({ createdAt: -1 });
+
+                const cohortData = await getCohortSummary();
+
+                toolResult = {
+                  id: studentDoc.student_id,
+                  name: studentDoc.name,
+                  course: studentDoc.course || 'N/A',
+                  stage: studentDoc.stage || '40%',
+                  risk_level: milestone.risk_level || 'Green',
+                  confidence: milestone.confidence !== undefined ? milestone.confidence : 0.80,
+                  top_reasons: milestone.top_reasons || [],
+                  weakTopic: studentDoc.weakTopic || 'None',
+                  engagement: {
+                    total_clicks: milestone.total_clicks || 0,
+                    active_days: milestone.active_days || 0,
+                    resources_accessed: milestone.resources_accessed || 0
+                  },
+                  teacher_notes: notes.map(n => ({
+                    text: n.text,
+                    createdAt: n.createdAt
+                  })),
+                  classAverages: cohortData.classAverages
+                };
+              }
+            }
+          } else if (fnName === 'getCohortSummary') {
+            toolResult = await getCohortSummary();
+          } else if (fnName === 'getStudentsByFilter') {
+            toolResult = await getStudentsByFilter({
+              course: fnArgs.course,
+              risk_level: fnArgs.risk_level
+            });
+          } else {
+            toolResult = { error: 'unknown_tool', message: `Unknown tool '${fnName}'.` };
+          }
+
+          currentMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(toolResult)
+          });
+        }
+        // Continue loop to get LLM's response incorporating tool results
+      } else {
+        // No more tool calls; we have the final assistant message
+        finalReply = responseMessage.content;
+        break;
+      }
+    }
+
+    const reply = finalReply || FALLBACK_ERROR_MESSAGE;
+    return res.json({ reply });
+
+  } catch (error) {
+    console.error('[Chatbot Teacher] Error processing request:', error.message);
+    const diagnosticReply = process.env.NODE_ENV === 'production'
+      ? FALLBACK_ERROR_MESSAGE
+      : (error.message.includes('GROQ_API_KEY') ? error.message : FALLBACK_ERROR_MESSAGE);
     return res.json({ reply: diagnosticReply });
   }
 });

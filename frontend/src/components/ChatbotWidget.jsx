@@ -5,18 +5,36 @@ import { MessageSquare, X, Send, Bot, User, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const INITIAL_GREETING = "Hi! Ask me anything about your academic progress.";
 
 export default function ChatbotWidget() {
   const { user, token } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+
+  const isTeacher = user?.role === 'teacher';
+  const initialGreeting = isTeacher
+    ? "Hi! Ask me about any student or your class as a whole."
+    : "Hi! Ask me anything about your academic progress.";
+  const panelSubtitle = isTeacher
+    ? "Ask about cohort & student risk"
+    : "Ask about performance & risk";
+  const apiEndpoint = isTeacher
+    ? `${API_URL}/api/chatbot/teacher`
+    : `${API_URL}/api/chatbot/student`;
+
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: INITIAL_GREETING, isGreeting: true }
+    { role: 'assistant', content: initialGreeting, isGreeting: true }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
+
+  // Reset conversation when logged in user changes
+  useEffect(() => {
+    setMessages([
+      { role: 'assistant', content: initialGreeting, isGreeting: true }
+    ]);
+  }, [user?.role, user?.id]);
 
   // Auto-scroll chat to latest message
   const scrollToBottom = () => {
@@ -29,8 +47,8 @@ export default function ChatbotWidget() {
     }
   }, [messages, isOpen, isLoading]);
 
-  // Render widget only for students
-  if (user?.role !== 'student') {
+  // Render widget only for authenticated students or teachers
+  if (!user || (user.role !== 'student' && user.role !== 'teacher')) {
     return null;
   }
 
@@ -55,7 +73,7 @@ export default function ChatbotWidget() {
         }));
 
       const response = await axios.post(
-        `${API_URL}/api/chatbot/student`,
+        apiEndpoint,
         { messages: payloadMessages },
         { headers: { Authorization: token ? `Bearer ${token}` : '' } }
       );
@@ -64,7 +82,7 @@ export default function ChatbotWidget() {
       setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
     } catch (error) {
       console.error('Error querying chatbot:', error);
-      const fallbackReply = error.response?.data?.reply || error.response?.data?.message || "Looks like things went south on my side. Unlike you, I am a novice. Let me restart my engines. Go for it again.";
+      const fallbackReply = error.response?.data?.reply || error.response?.data?.message || "Looks like things went south on my side. Unlike you, I am a newbie in job. Let me restart my engines. Go for it again.";
       setMessages(prev => [...prev, { role: 'assistant', content: fallbackReply }]);
     } finally {
       setIsLoading(false);
@@ -78,7 +96,7 @@ export default function ChatbotWidget() {
         <button
           onClick={() => setIsOpen(true)}
           className="flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-indigo-500/25 transition-transform duration-200 hover:rotate-[15deg] focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-900"
-          title="Open Academic Assistant Chatbot"
+          title={isTeacher ? "Open Teacher Assistant Chatbot" : "Open Academic Assistant Chatbot"}
           aria-label="Open Chatbot"
         >
           <MessageSquare className="w-6 h-6" />
@@ -95,8 +113,10 @@ export default function ChatbotWidget() {
                 <Bot className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm leading-snug">Academic Assistant</h3>
-                <p className="text-xs text-blue-100 font-normal">Ask about performance & risk</p>
+                <h3 className="font-semibold text-sm leading-snug">
+                  {isTeacher ? "Teacher Assistant" : "Academic Assistant"}
+                </h3>
+                <p className="text-xs text-blue-100 font-normal">{panelSubtitle}</p>
               </div>
             </div>
             <button
